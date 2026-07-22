@@ -1,8 +1,8 @@
-import { getStorage } from 'firebase-admin/storage';
 import { StorageBaseType } from '../../definition/firebase.js';
 import { decryptData, encryptData } from '../encryption/encryption.js';
+import { storageProvider } from '../storage/index.js';
 
-export const uploadFileToStorage = async (data: string, options: StorageBaseType) => {
+const getStoragePath = (options: StorageBaseType): string => {
 	const { path, type } = options;
 
 	let destPath = 'v3/';
@@ -19,78 +19,46 @@ export const uploadFileToStorage = async (data: string, options: StorageBaseType
 		destPath += `api/${path}`;
 	}
 
-	const storageBucket = getStorage().bucket();
-	const file = storageBucket.file(destPath);
+	return destPath;
+};
+
+export const uploadFileToStorage = async (data: string, options: StorageBaseType) => {
+	const destPath = getStoragePath(options);
 
 	const encryptedData = encryptData(data);
 
-	await file.save(encryptedData, { metadata: { contentType: 'text/plain' } });
+	await storageProvider.save(destPath, encryptedData, { contentType: 'text/plain' });
 
 	return encryptedData;
 };
 
-export const getFileMetadata = async ({ path, type }: StorageBaseType) => {
-	let destPath = 'v3/';
+export const getFileMetadata = async (options: StorageBaseType) => {
+	const destPath = getStoragePath(options);
 
-	if (type === 'congregation') {
-		destPath += `congregations/${path}`;
-	}
-
-	if (type === 'user') {
-		destPath += `users/${path}`;
-	}
-
-	const storageBucket = getStorage().bucket();
-	const file = await storageBucket.file(destPath);
-
-	const [fileExist] = await file.exists();
+	const fileExist = await storageProvider.exists(destPath);
 
 	if (fileExist) {
-		return file.metadata;
+		return storageProvider.getMetadata(destPath);
 	}
 };
 
-export const getFileFromStorage = async ({ path, type }: StorageBaseType) => {
-	let destPath = 'v3/';
+export const getFileFromStorage = async (options: StorageBaseType) => {
+	const destPath = getStoragePath(options);
 
-	if (type === 'congregation') {
-		destPath += `congregations/${path}`;
-	}
-
-	if (type === 'user') {
-		destPath += `users/${path}`;
-	}
-
-	if (type === 'api') {
-		destPath += `api/${path}`;
-	}
-
-	const storageBucket = getStorage().bucket();
-	const file = await storageBucket.file(destPath);
-
-	const [fileExist] = await file.exists();
+	const fileExist = await storageProvider.exists(destPath);
 
 	if (fileExist) {
-		const contents = await file.download();
+		const contents = await storageProvider.download(destPath);
 		const encryptedData = contents.toString();
 
 		return decryptData(encryptedData);
 	}
 };
 
-export const deleteFileFromStorage = async ({ path, type }: StorageBaseType) => {
-	if (!path || path.length === 0) return;
+export const deleteFileFromStorage = async (options: StorageBaseType) => {
+	if (!options.path || options.path.length === 0) return;
 
-	let destPath = 'v3/';
+	const destPath = getStoragePath(options);
 
-	if (type === 'congregation') {
-		destPath += `congregations/${path}`;
-	}
-
-	if (type === 'user') {
-		destPath += `users/${path}`;
-	}
-
-	const storageBucket = getStorage().bucket();
-	await storageBucket.deleteFiles({ prefix: destPath, force: true });
+	await storageProvider.deleteByPrefix(destPath);
 };
